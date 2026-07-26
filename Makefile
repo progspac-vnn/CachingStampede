@@ -3,7 +3,11 @@
 # present, otherwise fall back to whatever `go` is on PATH.
 GO := $(shell if [ -x "$(HOME)/sdk/go1.26.5/bin/go" ]; then echo "$(HOME)/sdk/go1.26.5/bin/go"; else echo "go"; fi)
 
-.PHONY: run tidy fmt docker-up docker-down
+-include .env
+POSTGRES_USER ?= postgres
+POSTGRES_DB ?= cachestampede
+
+.PHONY: run tidy fmt docker-up docker-down migrate-up migrate-down db-seed
 
 run:
 	$(GO) run ./cmd/api
@@ -19,3 +23,12 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+migrate-up:
+	$(GO) run ./cmd/migrate up
+
+migrate-down:
+	$(GO) run ./cmd/migrate down
+
+db-seed:
+	docker compose exec -T postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < scripts/seed.sql
