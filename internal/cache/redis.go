@@ -1,6 +1,7 @@
-// Package cache manages the Redis client used by the application. It knows
-// nothing about HTTP or business logic — only how to connect to, close, and
-// health-check Redis. Read/write operations belong to future milestones.
+// Package cache manages the Redis client used by the application and the
+// distributed lock primitive built on it. It knows nothing about HTTP or
+// business logic, or about product-specific cache keys — those decisions
+// belong to the service layer.
 package cache
 
 import (

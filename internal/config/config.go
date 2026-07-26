@@ -17,6 +17,28 @@ type Config struct {
 	Server   ServerConfig
 	Postgres PostgresConfig
 	Redis    RedisConfig
+	Cache    CacheConfig
+}
+
+// CacheConfig holds cache-aside policy configuration: freshness, staleness,
+// jitter, and distributed-lock behavior for the product cache.
+type CacheConfig struct {
+	// TTL is how long a cached entry is considered fresh.
+	TTL time.Duration
+	// StaleTTL is the additional window after TTL during which a cached
+	// entry is still served (stale-while-revalidate) instead of being
+	// treated as a hard miss.
+	StaleTTL time.Duration
+	// Jitter is the fraction (0-1) of random variance applied to the
+	// Redis hard-expiry (TTL+StaleTTL), so keys don't expire in lockstep.
+	Jitter float64
+	// LockTTL is how long a distributed refill lock is held before it
+	// expires on its own (safety net if the holder crashes).
+	LockTTL time.Duration
+	// LockWait is the maximum time a request that lost the lock race will
+	// poll for the winner to populate the cache before giving up and
+	// fetching directly.
+	LockWait time.Duration
 }
 
 // ServerConfig holds HTTP server configuration.
@@ -123,6 +145,27 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	productCacheTTL, err := parseDuration("PRODUCT_CACHE_TTL", 60*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	productCacheStaleTTL, err := parseDuration("PRODUCT_CACHE_STALE_TTL", 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	productCacheJitter, err := parseFloat("PRODUCT_CACHE_JITTER", 0.2)
+	if err != nil {
+		return nil, err
+	}
+	productCacheLockTTL, err := parseDuration("PRODUCT_CACHE_LOCK_TTL", 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	productCacheLockWait, err := parseDuration("PRODUCT_CACHE_LOCK_WAIT", 150*time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Env: getEnvOrDefault("APP_ENV", "development"),
 		Server: ServerConfig{
@@ -149,6 +192,13 @@ func Load() (*Config, error) {
 			Password:    os.Getenv("REDIS_PASSWORD"),
 			DB:          redisDB,
 			DialTimeout: redisDialTimeout,
+		},
+		Cache: CacheConfig{
+			TTL:      productCacheTTL,
+			StaleTTL: productCacheStaleTTL,
+			Jitter:   productCacheJitter,
+			LockTTL:  productCacheLockTTL,
+			LockWait: productCacheLockWait,
 		},
 	}
 
@@ -209,4 +259,16 @@ func parseInt(key string, fallback int) (int, error) {
 		return 0, fmt.Errorf("config: invalid integer for %s: %w", key, err)
 	}
 	return n, nil
+}
+
+func parseFloat(key string, fallback float64) (float64, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, fmt.Errorf("config: invalid float for %s: %w", key, err)
+	}
+	return f, nil
 }

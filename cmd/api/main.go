@@ -18,8 +18,11 @@ import (
 	"github.com/progspac-vnn/CachingStampede/internal/cache"
 	"github.com/progspac-vnn/CachingStampede/internal/config"
 	"github.com/progspac-vnn/CachingStampede/internal/db"
+	"github.com/progspac-vnn/CachingStampede/internal/handler"
 	"github.com/progspac-vnn/CachingStampede/internal/logger"
 	"github.com/progspac-vnn/CachingStampede/internal/metrics"
+	"github.com/progspac-vnn/CachingStampede/internal/repository"
+	"github.com/progspac-vnn/CachingStampede/internal/service"
 )
 
 func main() {
@@ -65,13 +68,19 @@ func run() error {
 	}()
 
 	appMetrics := metrics.New()
+	appMetrics.RegisterPostgresPool(postgres.Pool)
+
+	productRepo := repository.NewProductRepository(postgres.Pool)
+	productService := service.NewProductService(productRepo, redisClient.Client, redisClient, cfg.Cache, appMetrics, log)
+	productHandler := handler.NewProductHandler(productService, log)
 
 	// 5 & 6. Register Middleware, Register Routes
 	router := newRouter(dependencies{
-		postgres: postgres,
-		redis:    redisClient,
-		metrics:  appMetrics,
-		timeout:  cfg.Server.WriteTimeout,
+		postgres:       postgres,
+		redis:          redisClient,
+		metrics:        appMetrics,
+		productHandler: productHandler,
+		timeout:        cfg.Server.WriteTimeout,
 	}, log)
 
 	server := &http.Server{

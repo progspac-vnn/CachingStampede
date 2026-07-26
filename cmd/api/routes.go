@@ -11,21 +11,21 @@ import (
 
 	"github.com/progspac-vnn/CachingStampede/internal/cache"
 	"github.com/progspac-vnn/CachingStampede/internal/db"
+	"github.com/progspac-vnn/CachingStampede/internal/handler"
 	"github.com/progspac-vnn/CachingStampede/internal/metrics"
 	"github.com/progspac-vnn/CachingStampede/internal/middleware"
 )
 
-// dependencies bundles the infrastructure required to serve routes.
+// dependencies bundles the infrastructure and handlers required to serve routes.
 type dependencies struct {
-	postgres *db.Postgres
-	redis    *cache.Redis
-	metrics  *metrics.Metrics
-	timeout  time.Duration
+	postgres       *db.Postgres
+	redis          *cache.Redis
+	metrics        *metrics.Metrics
+	productHandler *handler.ProductHandler
+	timeout        time.Duration
 }
 
-// newRouter wires middleware and routes onto a chi.Mux. Only infrastructure
-// routes (/health, /ready, /metrics) are registered here — product routes
-// are out of scope for this milestone.
+// newRouter wires middleware and routes onto a chi.Mux.
 func newRouter(deps dependencies, log *zap.Logger) http.Handler {
 	r := chi.NewRouter()
 
@@ -38,6 +38,8 @@ func newRouter(deps dependencies, log *zap.Logger) http.Handler {
 	r.Get("/health", handleHealth)
 	r.Get("/ready", handleReady(deps))
 	r.Handle("/metrics", deps.metrics.Handler())
+
+	r.Get("/products/{id}", deps.productHandler.GetProduct)
 
 	return r
 }
